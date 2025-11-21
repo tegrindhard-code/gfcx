@@ -26,7 +26,8 @@ class IconPreparer:
             'target_height': 60,
             'min_padding': 2,  # pixels of padding around sprite
             'output_format': 'PNG',
-            'optimize': True
+            'optimize': True,
+            'bg_tolerance': 10  # color tolerance for background detection (0-255)
         }
         self.issues = []
         self.warnings = []
@@ -122,16 +123,16 @@ class IconPreparer:
     def _check_transparency(self, img):
         """Check if image has transparency"""
         if img.mode not in ['RGBA', 'LA', 'PA']:
-            self.issues.append("No alpha channel - transparency will not work")
-            print("❌ Transparency: No alpha channel")
+            self.warnings.append(f"No alpha channel (mode: {img.mode}) - will auto-detect and remove background")
+            print(f"⚠️  Transparency: No alpha channel (will be fixed automatically)")
         else:
             # Check if any pixels are actually transparent
             if img.mode == 'RGBA':
                 alpha = img.getchannel('A')
                 extrema = alpha.getextrema()
                 if extrema[0] == 255 and extrema[1] == 255:
-                    self.warnings.append("Has alpha channel but no transparent pixels")
-                    print("⚠️  Transparency: Alpha channel present but no transparent pixels")
+                    self.warnings.append("Has alpha channel but no transparent pixels - will remove background")
+                    print("⚠️  Transparency: No transparent pixels (will auto-detect background)")
                 else:
                     print(f"✓ Transparency: Yes (alpha range: {extrema[0]}-{extrema[1]})")
             else:
@@ -166,21 +167,123 @@ class IconPreparer:
             self.warnings.append(f"Aspect ratio {aspect:.2f} differs from target {target_aspect:.2f}")
             print(f"   ⚠️  Aspect ratio {aspect:.2f} (target: {target_aspect:.2f})")
 
+    def _detect_background_color(self, img):
+        """Detect the background color (most likely from corners)"""
+        width, height = img.size
+
+        # Sample corner pixels
+        corners = [
+            img.getpixel((0, 0)),
+            img.getpixel((width - 1, 0)),
+            img.getpixel((0, height - 1)),
+            img.getpixel((width - 1, height - 1))
+        ]
+
+        # Also sample edges
+        edge_samples = []
+        for x in range(0, width, max(1, width // 10)):
+            edge_samples.append(img.getpixel((x, 0)))
+            edge_samples.append(img.getpixel((x, height - 1)))
+        for y in range(0, height, max(1, height // 10)):
+            edge_samples.append(img.getpixel((0, y)))
+            edge_samples.append(img.getpixel((width - 1, y)))
+
+        # Find most common color in corners and edges
+        all_samples = corners + edge_samples
+        color_counts = {}
+        for color in all_samples:
+            # Normalize to RGB tuple (handle different modes)
+            if isinstance(color, int):
+                color = (color, color, color)
+            elif len(color) > 3:
+                color = color[:3]  # Drop alpha if present
+
+            color_counts[color] = color_counts.get(color, 0) + 1
+
+        # Return most common color
+        if color_counts:
+            bg_color = max(color_counts, key=color_counts.get)
+            return bg_color
+
+        # Default to white if detection fails
+        return (255, 255, 255)
+
+    def _make_background_transparent(self, img, bg_color, tolerance=10):
+        """Convert image to RGBA and make background color transparent"""
+        # Convert to RGBA
+        img = img.convert('RGBA')
+
+        # Get image data
+        datas = img.getdata()
+        new_data = []
+
+        pixels_changed = 0
+        for item in datas:
+            # Check if pixel is close to background color (within tolerance)
+            if len(item) >= 3:
+                r_diff = abs(item[0] - bg_color[0])
+                g_diff = abs(item[1] - bg_color[1])
+                b_diff = abs(item[2] - bg_color[2])
+
+                if r_diff <= tolerance and g_diff <= tolerance and b_diff <= tolerance:
+                    # Make transparent
+                    new_data.append((item[0], item[1], item[2], 0))
+                    pixels_changed += 1
+                else:
+                    # Keep original (but ensure full opacity if it wasn't transparent)
+                    new_data.append((item[0], item[1], item[2], 255))
+            else:
+                new_data.append(item)
+
+        img.putdata(new_data)
+        return img, pixels_changed
+
     def _apply_fixes(self, img, original):
         """Apply automatic fixes"""
         # Convert to RGBA if needed
         if img.mode != 'RGBA':
             print(f"   • Converting {img.mode} → RGBA")
+
+            # Special handling for palette mode with transparency
             if img.mode == 'P' and 'transparency' in img.info:
                 img = img.convert('RGBA')
+                self.fixes_applied.append("Converted to RGBA (preserved palette transparency)")
             else:
-                # Create RGBA with white background made transparent
-                rgba = Image.new('RGBA', img.size, (255, 255, 255, 0))
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                rgba.paste(img, (0, 0))
-                img = rgba
-            self.fixes_applied.append("Converted to RGBA")
+                # Detect background color from original image
+                bg_color = self._detect_background_color(original if original.mode in ['RGB', 'P', 'L'] else img)
+                print(f"   • Detected background color: RGB{bg_color}")
+
+                # Convert and make background transparent
+                img, pixels_changed = self._make_background_transparent(
+                    original if original.mode in ['RGB', 'P', 'L'] else img,
+                    bg_color,
+                    tolerance=self.config['bg_tolerance']
+                )
+
+                if pixels_changed > 0:
+                    total_pixels = img.size[0] * img.size[1]
+                    percent = (pixels_changed / total_pixels) * 100
+                    print(f"   • Made {pixels_changed:,} pixels transparent ({percent:.1f}%)")
+                    self.fixes_applied.append(f"Converted to RGBA with transparency (removed background)")
+                else:
+                    print(f"   • No background pixels detected")
+                    self.fixes_applied.append("Converted to RGBA")
+        else:
+            # Already RGBA, check if it needs transparency added
+            alpha = img.getchannel('A')
+            extrema = alpha.getextrema()
+            if extrema[0] == 255 and extrema[1] == 255:
+                # Has alpha channel but no transparent pixels
+                print(f"   • Detecting and removing background from RGBA image")
+                bg_color = self._detect_background_color(img)
+                print(f"   • Detected background color: RGB{bg_color}")
+                img, pixels_changed = self._make_background_transparent(img, bg_color, tolerance=self.config['bg_tolerance'])
+                if pixels_changed > 0:
+                    total_pixels = img.size[0] * img.size[1]
+                    percent = (pixels_changed / total_pixels) * 100
+                    print(f"   • Made {pixels_changed:,} pixels transparent ({percent:.1f}%)")
+                    self.fixes_applied.append(f"Removed background color")
+
 
         # Resize if needed
         width, height = img.size
