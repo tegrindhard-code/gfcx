@@ -1,0 +1,7 @@
+# Requirements for Pokemon Icon Sheet Tools
+
+# Required for prepare_custom_icon.py, generate_template.py, and validate_sheet.py
+Pillow>=10.0.0
+
+# Optional but recommended
+# numpy>=1.24.0  # For advanced image processing
