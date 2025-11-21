@@ -5,6 +5,16 @@ Tools for creating, managing, and validating Pokemon icon sprite sheets.
 ## Quick Start
 
 ```bash
+# For custom individual icons (recommended workflow):
+# 1. Prepare your icons (auto-fixes everything!)
+python prepare_custom_icon.py batch ./my_pokemon_icons
+
+# 2. Upload prepared icons to Roblox, note asset IDs
+
+# 3. Add to Pokemon.lua
+python add_custom_icon.py add
+
+# For sprite sheets:
 # 1. Generate template images
 python generate_template.py all
 
@@ -13,14 +23,46 @@ python icon_calculator.py 151 Mew
 
 # 3. Validate your sprite sheet
 python validate_sheet.py my_pokemon_sheet.png regular
-
-# 4. Add custom icon to Pokemon.lua
-python add_custom_icon.py add
 ```
 
 ## Tools Overview
 
-### 1. `icon_calculator.py` - Position Calculator
+### 1. `prepare_custom_icon.py` - Icon Preparation Tool ⭐ NEW
+
+**Automates ALL preparations for custom Pokemon icons before Roblox upload.**
+
+Automatically:
+- Validates PNG format and properties
+- Ensures RGBA transparency
+- Resizes to optimal dimensions (80×60px)
+- Centers sprites with padding
+- Optimizes file size
+- Batch processes directories
+- Creates preview sheet
+- Generates tracking spreadsheet
+
+**Quick Start:**
+```bash
+# Single icon
+python3 prepare_custom_icon.py single pikachu.png
+
+# Batch process (recommended!)
+python3 prepare_custom_icon.py batch ./my_pokemon_icons
+
+# Interactive mode
+python3 prepare_custom_icon.py interactive
+```
+
+**Output:**
+- ✅ Prepared icons ready for Roblox
+- 🖼️ Visual preview sheet
+- 📋 Tracking CSV for upload management
+
+**Full Guide:** [PREPARE_ICONS_GUIDE.md](PREPARE_ICONS_GUIDE.md)
+
+---
+
+### 2. `icon_calculator.py` - Position Calculator
 
 Calculates the exact pixel position for any icon number.
 
@@ -67,7 +109,7 @@ Pixel Coordinates:
   Size: 40px × 30px
 ```
 
-### 2. `validate_sheet.py` - Sprite Sheet Validator
+### 3. `validate_sheet.py` - Sprite Sheet Validator
 
 Validates sprite sheets before uploading to Roblox.
 
@@ -114,7 +156,7 @@ VALIDATION RESULTS
 ============================================================
 ```
 
-### 3. `add_custom_icon.py` - Custom Icon Manager
+### 4. `add_custom_icon.py` - Custom Icon Manager
 
 Adds custom Pokemon icons to Pokemon.lua automatically.
 
@@ -154,7 +196,7 @@ Available slots (gaps): 1151-1153
 Next sequential slot: 1186
 ```
 
-### 4. `generate_template.py` - Template Generator
+### 5. `generate_template.py` - Template Generator
 
 Creates blank template images with grid guides.
 
@@ -182,6 +224,32 @@ python generate_template.py reference
 - `sprite_reference.png` - Visual guide showing sprite dimensions
 
 ## Workflow Examples
+
+### Example 0: Add Custom Pokemon Icon (Easiest!) ⭐ NEW
+
+```bash
+# Step 1: Put your icons in a folder
+mkdir my_pokemon
+# Add pikachu_normal.png, pikachu_shiny.png, etc.
+
+# Step 2: Prepare all icons (auto-fixes everything!)
+python prepare_custom_icon.py batch my_pokemon
+# Creates: prepared/ folder with ready icons + preview + CSV
+
+# Step 3: Review the preview
+open prepared/preview_sheet.png
+
+# Step 4: Upload to Roblox
+# - Go to https://create.roblox.com
+# - Upload each prepared icon
+# - Note the asset IDs
+# - Update prepared/upload_tracking.csv
+
+# Step 5: Add to Pokemon.lua
+python add_custom_icon.py add 1186 12345678 12345679 Pikachu
+
+# Done! Test in game with: Pokemon:getIcon(1185, false)
+```
 
 ### Example 1: Add New Pokemon to Sprite Sheet
 
@@ -238,10 +306,16 @@ python validate_sheet.py pokedex_gen1.png regular
 
 All tools require Python 3.6+
 
-**Additional requirements for some tools:**
+**Additional requirements for image processing tools:**
 ```bash
-pip install Pillow  # For generate_template.py and validate_sheet.py
+# Install Pillow for prepare_custom_icon.py, generate_template.py, and validate_sheet.py
+pip install Pillow
+
+# Or install all requirements at once
+pip install -r tools/requirements.txt
 ```
+
+**Note:** `icon_calculator.py` and `add_custom_icon.py` work without any additional packages.
 
 ## Icon Numbering Quick Reference
 
