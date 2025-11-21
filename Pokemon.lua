@@ -62,8 +62,96 @@ return function(_p)
 		end
 		return nickname
 	end
+	-- Helper function: Creates a custom icon from a direct asset ID
+	local function createCustomIconGUI(imageAssetId)
+		return Utilities.Create 'ImageLabel' {
+			Name = 'PokemonIcon',
+			BackgroundTransparency = 1.0,
+			Image = imageAssetId,
+			Size = UDim2.new(0.85, 0, 1, 0),
+			ResampleMode = Enum.ResamplerMode.Pixelated,
+			ZIndex = 5
+		}
+	end
+
+	-- Helper function: Creates an egg icon from the egg sprite sheet
+	local function createEggIconGUI(icon)
+		-- Calculate which egg sprite to use based on icon number
+		local eggSpriteIndex
+		if icon > 1872 then
+			eggSpriteIndex = icon - 1442
+		else
+			eggSpriteIndex = icon - 1451
+		end
+
+		-- Size of the egg sprite
+		local eggSize = 0.7
+
+		-- Calculate position in the sprite sheet (18 eggs per row)
+		local spriteColumn = eggSpriteIndex % 18
+		local spriteRow = math.floor(eggSpriteIndex / 18)
+
+		return Utilities.Create 'Frame' {
+			Name = 'PokemonIcon',
+			BackgroundTransparency = 1.0,
+			Size = UDim2.new(1.0, 0, 1.0, 0),
+
+			Utilities.Create 'ImageLabel' {
+				BackgroundTransparency = 1.0,
+				Image = 'rbxassetid://13039987315',
+				ImageRectSize = Vector2.new(30, 32),
+				ImageRectOffset = Vector2.new(30 * spriteColumn, 32 * spriteRow),
+				Size = UDim2.new(3/4/32*30*eggSize, 0, eggSize, 0),
+				ResampleMode = Enum.ResamplerMode.Pixelated,
+				Position = UDim2.new(.5-3/4/32*30*eggSize/2, 0, 0.5-eggSize/2, 0),
+				ZIndex = 5,
+			}
+		}
+	end
+
+	-- Helper function: Creates a regular Pokemon icon from sprite sheets
+	local function createRegularIconGUI(icon, shiny)
+		-- Calculate position in the sprite grid (21 columns per sprite sheet)
+		local column = icon % 21
+		local row = math.floor(icon / 21)
+
+		-- Determine which sprite sheet image to use based on position
+		local imageIndex = 1
+		if column > 10 then
+			imageIndex = imageIndex + 1
+			column = column - 11
+		end
+		if row > 24 then
+			imageIndex = imageIndex + 2
+			row = row - 25
+		end
+		if row > 32 then
+			imageIndex = imageIndex + 2
+			row = row - 33
+		end
+
+		-- List of sprite sheet asset IDs
+		local spriteSheets = {17134745575, 17134749969, 17134753859, 17134757872, 17134761227, 0}
+
+		-- Calculate sprite offset (each sprite is 80px wide: 40px normal + 40px shiny)
+		local horizontalOffset = 80 * column + (shiny and 40 or 0)
+		local verticalOffset = 30 * row
+
+		return Utilities.Create 'ImageLabel' {
+			Name = 'PokemonIcon',
+			BackgroundTransparency = 1.0,
+			Image = 'rbxassetid://' .. spriteSheets[imageIndex],
+			ImageRectSize = Vector2.new(40, 30),
+			ImageRectOffset = Vector2.new(horizontalOffset, verticalOffset),
+			ResampleMode = Enum.ResamplerMode.Pixelated,
+			Size = UDim2.new(1.0, 0, 1.0, 0),
+			ZIndex = 5
+		}
+	end
+
 	function Pokemon:getIcon(icon, shiny)
-		local icontopoke = { -- custom icons
+		-- Lookup tables for custom Pokemon icons with unique assets
+		local customNormalIcons = {
 			[1145] = 'rbxassetid://11226762910', --xmas sceptile
 			[1146] = 'rbxassetid://15491372937', --santa lax
 			[1147] = 'rbxassetid://13917084621', -- walking wake
@@ -104,7 +192,8 @@ return function(_p)
 			[1184] = 'rbxassetid://13912712303', --charcadet
 			[1185] = 'rbxassetid://18183497722', --zorua
  		}
-		local icontopokeshiny = {
+
+		local customShinyIcons = {
 			[1147] = 'rbxassetid://17156352347', --walking wake
 			[1150] = 'rbxassetid://17152657050', --ceruledge
 			[1154] = 'rbxassetid://18183506539', --zoroark
@@ -139,88 +228,46 @@ return function(_p)
 			[1184] = 'rbxassetid://17152643126', --charcadet
 			[1185] = 'rbxassetid://18183498898', --zorua
 		}
+
 		local options = _p.Menu.options
-		local sfx = options.IconSFX
-		if icontopoke[icon + 1] then
-			local gui
-			if shiny then
-				gui = Utilities.Create 'ImageLabel' {
-					Name = 'PokemonIcon',
-					BackgroundTransparency = 1.0,
-					Image = icontopokeshiny[icon + 1],
-					Size = UDim2.new(0.85, 0, 1, 0),
-					ResampleMode = Enum.ResamplerMode.Pixelated,
-					ZIndex = 5
-				}
-			else
-				gui = Utilities.Create 'ImageLabel' {
-					Name = 'PokemonIcon',
-					BackgroundTransparency = 1.0,
-					Image = icontopoke[icon + 1],
-					Size = UDim2.new(0.85, 0, 1, 0),
-					ResampleMode = Enum.ResamplerMode.Pixelated,
-					ZIndex = 5
-				}	
-			end	
-			spawn(function() 
-				if shiny and sfx then
+		local sfxEnabled = options.IconSFX
+
+		-- Check if this is a custom icon (uses icon + 1 as the key)
+		local customIconKey = icon + 1
+		if customNormalIcons[customIconKey] then
+			-- Get the appropriate asset ID (shiny version if available, otherwise normal)
+			local assetId = shiny and customShinyIcons[customIconKey] or customNormalIcons[customIconKey]
+			local gui = createCustomIconGUI(assetId)
+
+			-- Add sparkle effect for shiny Pokemon if SFX is enabled
+			spawn(function()
+				if shiny and sfxEnabled then
 					self:animateSFX(gui, 'Sparkle')
 				end
 			end)
+
 			return gui, icon
 		end
-		
-		
 
+		-- Determine icon type and create appropriate GUI
 		local gui
-		if icon > 1450 then -- egg threshold
-			-- Egg
-			local i
-			if icon > 1872 then
-				i = icon-1442
-			else
-				i = icon-1451 -- also egg threshold dependent
-			end
-			local s = .7
-			gui = Utilities.Create 'Frame' {
-				Name = 'PokemonIcon',
-				BackgroundTransparency = 1.0,
-				Size = UDim2.new(1.0, 0, 1.0, 0),
+		local EGG_THRESHOLD = 1450
 
-				Utilities.Create 'ImageLabel' {
-					BackgroundTransparency = 1.0,
-					Image = 'rbxassetid://13039987315',
-					ImageRectSize = Vector2.new(30, 32),
-					ImageRectOffset = Vector2.new(30*(i%18), 32*math.floor(i/18)),
-					Size = UDim2.new(3/4/32*30*s, 0, s, 0),
-					ResampleMode = Enum.ResamplerMode.Pixelated,
-					Position = UDim2.new(.5-3/4/32*30*s/2, 0, 0.5-s/2, 0),
-					ZIndex = 5,
-				}
-			}
+		if icon > EGG_THRESHOLD then
+			-- Create egg icon
+			gui = createEggIconGUI(icon)
 		else
-			local col = icon%21
-			local row = math.floor(icon/21)
-			local image = 1
-			if col>10 then image=image+1 col=col-11 end
-			if row>24 then image=image+2 row=row-25 end
-			if row>32 then image=image+2 row=row-33 end
-			gui = Utilities.Create 'ImageLabel' {
-				Name = 'PokemonIcon',
-				BackgroundTransparency = 1.0,
-				Image = 'rbxassetid://'..({17134745575,17134749969,17134753859,17134757872,17134761227,0})[image],
-				ImageRectSize = Vector2.new(40, 30),
-				ImageRectOffset = Vector2.new(80*col+(shiny and 40 or 0), 30*row),
-				ResampleMode = Enum.ResamplerMode.Pixelated,
-				Size = UDim2.new(1.0, 0, 1.0, 0),
-				ZIndex = 5
-			}
+			-- Create regular Pokemon icon from sprite sheets
+			gui = createRegularIconGUI(icon, shiny)
 		end
-		spawn(function() 
-			if shiny and sfx then
+
+		-- Add sparkle effect for shiny Pokemon if SFX is enabled
+		spawn(function()
+			if shiny and sfxEnabled then
 				self:animateSFX(gui, 'Sparkle')
 			end
 		end)
+
 		return gui, icon
 	end
 	function Pokemon:animateSFX(gui, variant)
